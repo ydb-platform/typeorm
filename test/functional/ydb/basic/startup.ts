@@ -18,8 +18,6 @@ describe("ydb driver > startup", () => {
                 schemaCreate: true,
                 dropSchema: true,
                 enabledDrivers: ["ydb"],
-                driverSpecific: {
-                },
             })),
     )
     beforeEach(() => reloadTestingDatabases(connections))
