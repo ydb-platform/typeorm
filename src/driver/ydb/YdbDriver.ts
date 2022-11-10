@@ -18,6 +18,7 @@ import * as Ydb from "ydb-sdk"
 import { DataSource } from "../../data-source"
 import { YdbConnectionOptions } from "./YdbConnectionOptions"
 import { DriverPackageNotInstalledError } from "../../error"
+import { YdbQueryRunner } from "./YdbQueryRunner"
 
 // TODO: remove Ydb references to have no direct deps
 export class YdbDriver implements Driver {
@@ -87,23 +88,23 @@ export class YdbDriver implements Driver {
         this.driver = new this.Ydb.Driver(driverOptions)
 
         await this.driver.ready(options.connectTimeout)
-        console.log(`Connected to ${this.options.endpoint}`)
+        // ready doesn't mean that connection is successfull (investigate why)
     }
 
     async afterConnect(): Promise<void> {
-        if (!this.driver) return
-        await this.driver.tableClient.withSession(async (session) => {
+        await this.driver?.tableClient.withSession(async (session) => {
             console.log("Select 1", await session.executeQuery(`SELECT 1;`))
         })
     }
 
     async disconnect(): Promise<void> {
-        // throw new Error("Method not implemented.")
-    }
-    createSchemaBuilder(): SchemaBuilder {
-        throw new Error("Method not implemented.")
+        await this.driver?.destroy()
+        this.driver = undefined
     }
     createQueryRunner(mode: ReplicationMode): QueryRunner {
+        return new YdbQueryRunner(this, mode)
+    }
+    createSchemaBuilder(): SchemaBuilder {
         throw new Error("Method not implemented.")
     }
     escapeQueryWithParameters(
