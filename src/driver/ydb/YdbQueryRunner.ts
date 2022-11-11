@@ -30,6 +30,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
 
     async query(
         query: string,
+        // TODO: check from where parameters can be send
         parameters?: any | undefined,
         useStructuredResult?: boolean | undefined,
     ): Promise<any> {
@@ -42,6 +43,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     }
 
     protected loadTables(tablePaths?: string[] | undefined): Promise<Table[]> {
+        // TODO: Needs implementation
         if (tablePaths && tablePaths.length > 0) {
             throw new Error("Method not implemented.")
         } else {
@@ -50,6 +52,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     }
 
     protected loadViews(tablePaths?: string[] | undefined): Promise<View[]> {
+        // TODO: Needs implementation
         if (tablePaths && tablePaths.length > 0) {
             throw new Error("Method not implemented.")
         } else {
@@ -79,14 +82,17 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     startTransaction(
         isolationLevel?: IsolationLevel | undefined,
     ): Promise<void> {
+        // TODO: Needs implementation
         return Promise.resolve()
     }
 
     commitTransaction(): Promise<void> {
+        // TODO: Needs implementation
         return Promise.resolve()
     }
 
     rollbackTransaction(): Promise<void> {
+        // TODO: Needs implementation
         return Promise.resolve()
     }
 

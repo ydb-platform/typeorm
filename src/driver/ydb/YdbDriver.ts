@@ -107,6 +107,7 @@ export class YdbDriver implements Driver {
         return new YdbQueryRunner(this, mode)
     }
     createSchemaBuilder(): SchemaBuilder {
+        // TODO: Needs implementation
         return new RdbmsSchemaBuilder(this.connection)
     }
     escapeQueryWithParameters(
