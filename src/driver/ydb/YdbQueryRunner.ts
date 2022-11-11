@@ -12,52 +12,82 @@ import { View } from "../../schema-builder/view/View"
 import { IsolationLevel } from "../types/IsolationLevel"
 import { YdbDriver } from "./YdbDriver"
 import { ReplicationMode } from "../types/ReplicationMode"
+import { QueryRunnerAlreadyReleasedError } from "../../error"
+import { Broadcaster } from "../../subscriber/Broadcaster"
 
 export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
+    /**
+     * Database driver used by connection.
+     */
+    driver: YdbDriver
+
     constructor(ydbDriver: YdbDriver, replicationMode: ReplicationMode) {
         super()
+        this.driver = ydbDriver
+        this.connection = ydbDriver.connection
+        this.broadcaster = new Broadcaster(this)
     }
 
-    query(
+    async query(
         query: string,
-        parameters?: any[] | undefined,
+        parameters?: any | undefined,
         useStructuredResult?: boolean | undefined,
     ): Promise<any> {
-        throw new Error("Method not implemented.")
+        if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
+
+        await this.driver.driver?.tableClient.withSession(async (session) => {
+            const preparedQuery = await session.prepareQuery(query)
+            await session.executeQuery(preparedQuery, parameters)
+        })
     }
 
     protected loadTables(tablePaths?: string[] | undefined): Promise<Table[]> {
-        throw new Error("Method not implemented.")
+        if (tablePaths && tablePaths.length > 0) {
+            throw new Error("Method not implemented.")
+        } else {
+            return Promise.resolve([])
+        }
     }
 
     protected loadViews(tablePaths?: string[] | undefined): Promise<View[]> {
-        throw new Error("Method not implemented.")
+        if (tablePaths && tablePaths.length > 0) {
+            throw new Error("Method not implemented.")
+        } else {
+            return Promise.resolve([])
+        }
     }
 
     connect(): Promise<any> {
         throw new Error("Method not implemented.")
     }
 
-    release(): Promise<void> {
-        throw new Error("Method not implemented.")
+    async release(): Promise<void> {
+        await this.driver.disconnect()
+        this.isReleased = true
     }
 
-    clearDatabase(database?: string | undefined): Promise<void> {
-        throw new Error("Method not implemented.")
+    async clearDatabase(database?: string | undefined): Promise<void> {
+        const result = await this.driver.driver?.schemeClient.listDirectory("/")
+
+        await this.driver.driver?.tableClient.withSession(async (session) => {
+            result?.children.forEach((table) => {
+                session.dropTable(table.name as string)
+            })
+        })
     }
 
     startTransaction(
         isolationLevel?: IsolationLevel | undefined,
     ): Promise<void> {
-        throw new Error("Method not implemented.")
+        return Promise.resolve()
     }
 
     commitTransaction(): Promise<void> {
-        throw new Error("Method not implemented.")
+        return Promise.resolve()
     }
 
     rollbackTransaction(): Promise<void> {
-        throw new Error("Method not implemented.")
+        return Promise.resolve()
     }
 
     stream(

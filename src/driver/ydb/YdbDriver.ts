@@ -19,10 +19,11 @@ import { DataSource } from "../../data-source"
 import { YdbConnectionOptions } from "./YdbConnectionOptions"
 import { DriverPackageNotInstalledError } from "../../error"
 import { YdbQueryRunner } from "./YdbQueryRunner"
+import {RdbmsSchemaBuilder} from "../../schema-builder/RdbmsSchemaBuilder";
 
 // TODO: remove Ydb references to have no direct deps
 export class YdbDriver implements Driver {
-    private connection: DataSource
+    connection: DataSource
     options: YdbConnectionOptions
     version?: string | undefined
     database?: string | undefined
@@ -62,6 +63,7 @@ export class YdbDriver implements Driver {
     constructor(connection: DataSource) {
         this.connection = connection
         this.options = connection.options as YdbConnectionOptions
+        this.transactionSupport = "none"
 
         // load ydb-sdk package
         this.loadDependencies()
@@ -105,7 +107,7 @@ export class YdbDriver implements Driver {
         return new YdbQueryRunner(this, mode)
     }
     createSchemaBuilder(): SchemaBuilder {
-        throw new Error("Method not implemented.")
+        return new RdbmsSchemaBuilder(this.connection)
     }
     escapeQueryWithParameters(
         sql: string,
