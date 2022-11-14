@@ -14,9 +14,9 @@ describe("ydb driver > startup", () => {
     before(
         async () =>
             (connections = await createTestingConnections({
-                entities: [],
+                entities: [], //__dirname + "/../entity/*{.js,.ts}"
                 schemaCreate: true,
-                dropSchema: true,
+                dropSchema: false,
                 enabledDrivers: ["ydb"],
             })),
     )
