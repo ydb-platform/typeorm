@@ -115,41 +115,51 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         const loadAllTables =
             (tableNames && tableNames.length === 0) || !tableNames
 
-        const result = await this.getSchemaList("")
+        const result = await this.getSchemaList("", true)
 
         const schemeList = result.filter(
             (item) =>
                 item.type === Ydb.Ydb.Scheme.Entry.Type.TABLE &&
                 (tableNames?.includes(item.name || "") ||
-                (item.name != ".sys" && loadAllTables)),
+                    ((item.path as string).indexOf(".sys") === -1 &&
+                        loadAllTables)),
         )
 
         let tables: Table[] = []
 
         for await (const schemeItem of schemeList || []) {
             const table: Table = new Table({
-                name: schemeItem.name || "",
+                name: schemeItem.name,
+                schema: schemeItem.path,
                 database: this.driver.database,
             })
 
-            const findAttr = function(obj: any, strKey:string):any {
-                return [].concat.apply([], Object.keys(obj).map(function (key) {
-                    if (typeof obj[key] === 'object') return findAttr(obj[key], strKey)
-                    if(key===strKey) return obj[key]
-                }))
+            const findAttr = function (obj: any, strKey: string): any {
+                return [].concat.apply(
+                    [],
+                    Object.keys(obj).map(function (key) {
+                        if (typeof obj[key] === "object")
+                            return findAttr(obj[key], strKey)
+                        if (key === strKey) return obj[key]
+                    }),
+                )
             }
 
             const tableDescription: Ydb.Ydb.Table.DescribeTableResult =
                 await databaseConnection.describeTable(schemeItem.path)
             tableDescription.columns.forEach((column, index) => {
-                let typeName:any;
-                if(column.type) typeName = convertYdbTypeToObject(column.type)
+                let typeName: any
+                if (column.type) typeName = convertYdbTypeToObject(column.type)
 
                 table.columns.push(
                     new TableColumn({
                         name: column.name || "",
                         type: typeName.inner.type.toLowerCase() || "",
-                        isPrimary: (column.name===tableDescription.primaryKey.find(value => value===column.name)) || false
+                        isPrimary:
+                            column.name ===
+                                tableDescription.primaryKey.find(
+                                    (value) => value === column.name,
+                                ) || false,
                     }),
                 )
             })
@@ -216,13 +226,13 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      */
     async clearDatabase(database?: string | undefined): Promise<void> {
         if (!this.loadedTables || this.loadedTables.length === 0)
-            await this.getTables()
+            this.loadedTables = await this.getTables()
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
         const databaseConnection = await this.connect()
 
         this.loadedTables.forEach((table) => {
-            databaseConnection.dropTable(table.name as string)
+            databaseConnection.dropTable(`${table.schema}/${table.name}`)
         })
     }
 
@@ -659,7 +669,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
 
         for await (const schemeItem of schemeList?.children || []) {
             result.push({
-                path: `${path}/${schemeItem.name}`,
+                path: `${path}`,
                 name: schemeItem.name || "",
                 type:
                     schemeItem.type ||
