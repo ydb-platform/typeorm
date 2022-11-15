@@ -97,7 +97,12 @@ export type SimpleColumnType =
     | "integer" // postgres, oracle, sqlite, cockroachdb
     | "int4" // postgres, cockroachdb
     | "int8" // postgres, sqlite, cockroachdb
-    | "int64" // cockroachdb, spanner
+    | "int16" // ydb
+    | "int32" // ydb
+    | "int64" // cockroachdb, spanner, ydb
+    | "uint8" // ydb
+    | "uint32" // ydb
+    | "uint64" // ydb
     | "unsigned big int" // sqlite
     | "float" // mysql, mssql, oracle, sqlite, sap
     | "float4" // postgres, cockroachdb
@@ -109,6 +114,7 @@ export type SimpleColumnType =
     // boolean types
     | "boolean" // postgres, sqlite, mysql, cockroachdb
     | "bool" // postgres, mysql, cockroachdb, spanner
+    | "Bool" // ydb
 
     // text/binary types
     | "tinyblob" // mysql
@@ -133,6 +139,7 @@ export type SimpleColumnType =
     | "clob" // oracle, sqlite, sap
     | "nclob" // oracle, sap
     | "image" // mssql
+    | "utf8" // ydb
 
     // date types
     | "timetz" // postgres
@@ -145,6 +152,10 @@ export type SimpleColumnType =
     | "interval" // postgres, cockroachdb
     | "year" // mysql
     | "seconddate" // sap
+    | "datetime" //ydb
+    | "TzDate" // ydb
+    | "TzDateTime" // ydb
+    | "TzTimestamp" // ydb
 
     // geometric types
     | "point" // postgres, mysql
@@ -185,7 +196,9 @@ export type SimpleColumnType =
     | "tsquery" // postgres
     | "uuid" // postgres, cockroachdb
     | "xml" // mssql, postgres
+    | "yson" // ydb
     | "json" // mysql, postgres, cockroachdb, spanner
+    | "jsonDocument" // ydb
     | "jsonb" // postgres, cockroachdb
     | "varbinary" // mssql, sap
     | "hierarchyid" // mssql
@@ -197,6 +210,22 @@ export type SimpleColumnType =
     | "array" // cockroachdb, sap, spanner
     | "cube" // postgres
     | "ltree" // postgres
+    | "List" // ydb
+    | "Dictionary" // ydb
+    | "Set" // ydb
+    | "Tuple" // ydb
+    | "Structure" // ydb
+    | "Stream" // ydb
+    | "Variant" // ydb
+    | "Enumeration" // ydb
+    | "Callable" // ydb
+    | "Tagged" // ydb
+    | "Generic" // ydb
+    | "Unit" // ydb
+    | "Null" // ydb
+    | "Void" // ydb
+    | "EmptyList" // ydb
+    | "EmptyDict" // ydb
 
 /**
  * Any column type column can be.
