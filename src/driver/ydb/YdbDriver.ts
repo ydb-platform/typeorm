@@ -20,6 +20,7 @@ import { YdbConnectionOptions } from "./YdbConnectionOptions"
 import { DriverPackageNotInstalledError } from "../../error"
 import { YdbQueryRunner } from "./YdbQueryRunner"
 import { RdbmsSchemaBuilder } from "../../schema-builder/RdbmsSchemaBuilder"
+import {RdbmsSchemaBuilder} from "../../schema-builder/RdbmsSchemaBuilder";
 
 // TODO: remove Ydb references to have no direct deps
 export class YdbDriver implements Driver {
