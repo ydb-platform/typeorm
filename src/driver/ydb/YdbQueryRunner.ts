@@ -134,17 +134,6 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
                 database: this.driver.database,
             })
 
-            const findAttr = function (obj: any, strKey: string): any {
-                return [].concat.apply(
-                    [],
-                    Object.keys(obj).map(function (key) {
-                        if (typeof obj[key] === "object")
-                            return findAttr(obj[key], strKey)
-                        if (key === strKey) return obj[key]
-                    }),
-                )
-            }
-
             const tableDescription: Ydb.Ydb.Table.DescribeTableResult =
                 await databaseConnection.describeTable(schemeItem.path)
             tableDescription.columns.forEach((column, index) => {
@@ -229,7 +218,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             this.loadedTables = await this.getTables()
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
-        const databaseConnection = await this.connect()
+        const databaseConnection: Ydb.Session = await this.connect()
 
         this.loadedTables.forEach((table) => {
             databaseConnection.dropTable(`${table.schema}/${table.name}`)
