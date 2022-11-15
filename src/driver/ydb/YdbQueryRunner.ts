@@ -216,7 +216,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      */
     async clearDatabase(database?: string | undefined): Promise<void> {
         if (!this.loadedTables || this.loadedTables.length === 0)
-            await this.loadTables()
+            await this.getTables()
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
         const databaseConnection = await this.connect()
