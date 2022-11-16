@@ -19,7 +19,7 @@ import { DataSource } from "../../data-source"
 import { YdbConnectionOptions } from "./YdbConnectionOptions"
 import { DriverPackageNotInstalledError } from "../../error"
 import { YdbQueryRunner } from "./YdbQueryRunner"
-import {RdbmsSchemaBuilder} from "../../schema-builder/RdbmsSchemaBuilder";
+import { RdbmsSchemaBuilder } from "../../schema-builder/RdbmsSchemaBuilder"
 
 // TODO: remove Ydb references to have no direct deps
 export class YdbDriver implements Driver {
@@ -31,7 +31,28 @@ export class YdbDriver implements Driver {
     isReplicated: boolean
     treeSupport: boolean
     transactionSupport: "simple" | "nested" | "none"
-    supportedDataTypes: ColumnType[]
+
+    supportedDataTypes: ColumnType[] = [
+        "decimal", // Only Decimal(22,9) is supported for table columns
+        "int32",
+        "int64",
+        "uint8",
+        "uint32",
+        "uint64",
+        "float",
+        "double",
+        "bool",
+        "dyNumber",
+        "string",
+        "utf8",
+        "date",
+        "datetime",
+        "timestamp",
+        "interval",
+        "json",
+        "jsonDocument",
+        "yson",
+    ]
     supportedUpsertType?: UpsertType | undefined
     dataTypeDefaults: DataTypeDefaults
     spatialTypes: ColumnType[]
