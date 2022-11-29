@@ -32,6 +32,11 @@ export class YdbDriver implements Driver {
     treeSupport: boolean
     transactionSupport: "simple" | "nested" | "none"
 
+    /**
+     * We store all created query runners because we need to release them.
+     */
+    connectedQueryRunners: QueryRunner[] = []
+
     supportedDataTypes: ColumnType[] = [
         "decimal", // Only Decimal(22,9) is supported for table columns
         "int32",

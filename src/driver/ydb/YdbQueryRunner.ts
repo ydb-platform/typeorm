@@ -12,8 +12,12 @@ import { View } from "../../schema-builder/view/View"
 import { IsolationLevel } from "../types/IsolationLevel"
 import { YdbDriver } from "./YdbDriver"
 import { ReplicationMode } from "../types/ReplicationMode"
-import { QueryRunnerAlreadyReleasedError } from "../../error"
+import {
+    DriverNotInitialized,
+    QueryRunnerAlreadyReleasedError,
+} from "../../error"
 import { Broadcaster } from "../../subscriber/Broadcaster"
+import * as Ydb from "ydb-sdk"
 
 export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
@@ -21,11 +25,22 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      */
     driver: YdbDriver
 
+    /**
+     * Real database connection from a connection pool used to perform queries.
+     */
+    databaseConnection: Ydb.Session
+    private sessionTimeout: number
+
     constructor(ydbDriver: YdbDriver, replicationMode: ReplicationMode) {
         super()
         this.driver = ydbDriver
+        if (!this.driver.driver) {
+            throw new DriverNotInitialized("ydb")
+        }
+
         this.connection = ydbDriver.connection
         this.broadcaster = new Broadcaster(this)
+        this.sessionTimeout = ydbDriver.options.connectTimeout
     }
 
     async query(
@@ -60,15 +75,52 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         }
     }
 
-    connect(): Promise<any> {
-        throw new Error("Method not implemented.")
+    /**
+     * Creates/uses database connection from the connection pool to perform further operations.
+     * Returns obtained database connection.
+     */
+    async connect(): Promise<Ydb.Session> {
+        if (!this.driver.driver) {
+            throw new DriverNotInitialized("ydb")
+        }
+        if (this.databaseConnection && !this.isReleased)
+            return this.databaseConnection
+
+        if (!this.databaseConnection) {
+            this.databaseConnection =
+                await this.driver.driver.tableClient.getSessionUnmanaged(
+                    this.sessionTimeout,
+                )
+        }
+
+        this.databaseConnection.acquire()
+
+        this.isReleased = false
+
+        this.driver.connectedQueryRunners.push(this)
+
+        return this.databaseConnection
     }
 
+    /**
+     * Releases used database connection.
+     * You cannot use query runner methods once its released.
+     */
     async release(): Promise<void> {
-        await this.driver.disconnect()
-        this.isReleased = true
-    }
+        if (this.isReleased || !this.databaseConnection) {
+            return
+        }
 
+        this.isReleased = true
+
+        this.databaseConnection.release()
+
+        const index = this.driver.connectedQueryRunners.indexOf(this)
+
+        if (index !== -1) {
+            this.driver.connectedQueryRunners.splice(index, 1)
+        }
+    }
     async clearDatabase(database?: string | undefined): Promise<void> {
         const result = await this.driver.driver?.schemeClient.listDirectory("/")
 
