@@ -14,10 +14,15 @@ import { YdbDriver } from "./YdbDriver"
 import { ReplicationMode } from "../types/ReplicationMode"
 import {
     DriverNotInitialized,
+    QueryFailedError,
     QueryRunnerAlreadyReleasedError,
 } from "../../error"
 import { Broadcaster } from "../../subscriber/Broadcaster"
 import * as Ydb from "ydb-sdk"
+
+interface IQueryParams {
+    [k: string]: Ydb.Ydb.ITypedValue
+}
 
 export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
@@ -51,18 +56,69 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         this.sessionTimeout = ydbDriver.options.connectTimeout
     }
 
+    /**
+     * Executes a given SQL query with optional parameters.
+     */
     async query(
         query: string,
-        // TODO: check from where parameters can be send
-        parameters?: any | undefined,
+        parameters?: any[] | undefined,
         useStructuredResult?: boolean | undefined,
     ): Promise<any> {
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
-        await this.driver.driver?.tableClient.withSession(async (session) => {
-            const preparedQuery = await session.prepareQuery(query)
-            await session.executeQuery(preparedQuery, parameters)
-        })
+        this.driver.connection.logger.logQuery(query, parameters, this)
+
+        const databaseConnection = await this.connect()
+
+        let typedParams: IQueryParams = {}
+        function isQueryParam(item: any): item is IQueryParams {
+            return item[0]?.hasOwnProperty("type") === true
+        }
+        if (parameters?.length && isQueryParam(parameters[0])) {
+            Object.assign(typedParams, parameters[0])
+        } else {
+            parameters?.map((val, ind) => {
+                Object.assign(typedParams, {
+                    ["$param" + ind.toString()]: Ydb.TypedValues.string(val),
+                })
+            })
+        }
+
+        try {
+            const queryStartTime = +new Date()
+            const result = await databaseConnection.executeQuery(
+                query,
+                typedParams,
+            )
+
+            // log slow queries if maxQueryExecution time is set
+            const maxQueryExecutionTime =
+                this.driver.options.maxQueryExecutionTime
+            const queryEndTime = +new Date()
+            const queryExecutionTime = queryEndTime - queryStartTime
+
+            if (
+                maxQueryExecutionTime &&
+                queryExecutionTime > maxQueryExecutionTime
+            ) {
+                this.driver.connection.logger.logQuerySlow(
+                    queryExecutionTime,
+                    query,
+                    parameters,
+                    this,
+                )
+            }
+
+            return result
+        } catch (err) {
+            this.driver.connection.logger.logQueryError(
+                err,
+                query,
+                parameters,
+                this,
+            )
+            throw new QueryFailedError(query, parameters, err)
+        }
     }
 
     protected loadTables(tablePaths?: string[] | undefined): Promise<Table[]> {
@@ -87,7 +143,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      * Creates/uses database connection from the connection pool to perform further operations.
      * Returns obtained database connection.
      */
-    async connect(): Promise<any> {
+    async connect(): Promise<Ydb.Session> {
         if (!this.driver.driver) {
             throw new DriverNotInitialized("ydb")
         }
@@ -116,7 +172,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      */
     async release(): Promise<void> {
         if (this.isReleased || !this.databaseConnection) {
-            throw new QueryRunnerAlreadyReleasedError()
+            return
         }
 
         this.isReleased = true

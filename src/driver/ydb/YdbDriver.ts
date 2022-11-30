@@ -120,9 +120,9 @@ export class YdbDriver implements Driver {
     }
 
     async afterConnect(): Promise<void> {
-        await this.driver?.tableClient.withSession(async (session) => {
-            console.log("Select 1", await session.executeQuery(`SELECT 1;`))
-        })
+        const qRunner: YdbQueryRunner = new YdbQueryRunner(this, "master")
+        const result = await qRunner.query(`SELECT 1;`, ['test', 'test 1'])
+        console.log("Select 1", result)
     }
 
     async disconnect(): Promise<void> {
