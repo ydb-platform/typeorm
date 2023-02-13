@@ -17,7 +17,10 @@ import { UpsertType } from "../types/UpsertType"
 import * as Ydb from "ydb-sdk"
 import { DataSource } from "../../data-source"
 import { YdbConnectionOptions } from "./YdbConnectionOptions"
-import { DriverPackageNotInstalledError } from "../../error"
+import {
+    ConnectionIsNotSetError,
+    DriverPackageNotInstalledError,
+} from "../../error"
 import { YdbQueryRunner } from "./YdbQueryRunner"
 import { RdbmsSchemaBuilder } from "../../schema-builder/RdbmsSchemaBuilder"
 
@@ -33,9 +36,9 @@ export class YdbDriver implements Driver {
     transactionSupport: "simple" | "nested" | "none"
 
     /**
-     * We store all created query runners because we need to release them.
+     * We do not store all created query runners because we don't need to release them.
      */
-    connectedQueryRunners: QueryRunner[] = []
+    // connectedQueryRunners: QueryRunner[] = []
 
     supportedDataTypes: ColumnType[] = [
         "decimal", // Only Decimal(22,9) is supported for table columns
@@ -115,13 +118,19 @@ export class YdbDriver implements Driver {
             driverOptions.poolSettings = options.poolSettings
         this.driver = new this.Ydb.Driver(driverOptions)
 
-        await this.driver.ready(options.connectTimeout)
+        if (!(await this.driver.ready(options.connectTimeout))) {
+            this.connection.logger.log(
+                "warn",
+                `Connection has not become ready in ${options.connectTimeout}ms!`,
+            )
+            throw new ConnectionIsNotSetError("ydb")
+        }
         // ready doesn't mean that connection is successfull (investigate why)
     }
 
     async afterConnect(): Promise<void> {
         const qRunner: YdbQueryRunner = new YdbQueryRunner(this, "master")
-        const result = await qRunner.query(`SELECT 1;`, ['test', 'test 1'])
+        const result = await qRunner.query(`SELECT 1;`, ["test", "test 1"])
         console.log("Select 1", result)
     }
 

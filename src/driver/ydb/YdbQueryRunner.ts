@@ -41,8 +41,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
      * Real database connection from a connection pool used to perform queries.
      */
-    databaseConnection: Ydb.Session
-    private sessionTimeout: number
+    databaseConnection: Ydb.Driver
 
     constructor(ydbDriver: YdbDriver, replicationMode: ReplicationMode) {
         super()
@@ -53,7 +52,6 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
 
         this.connection = ydbDriver.connection
         this.broadcaster = new Broadcaster(this)
-        this.sessionTimeout = ydbDriver.options.connectTimeout
     }
 
     /**
@@ -84,32 +82,19 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             })
         }
 
+        const queryStartTime = +new Date()
+        let result: Ydb.Ydb.Table.ExecuteQueryResult | object[]
+        const maxQueryExecutionTime = this.driver.options.maxQueryExecutionTime
+        let queryEndTime: number
+
         try {
-            const queryStartTime = +new Date()
-            const result = await databaseConnection.executeQuery(
-                query,
-                typedParams,
+            result = await databaseConnection.tableClient.withSession(
+                async (session) => {
+                    return await session.executeQuery(query, typedParams)
+                },
             )
 
-            // log slow queries if maxQueryExecution time is set
-            const maxQueryExecutionTime =
-                this.driver.options.maxQueryExecutionTime
-            const queryEndTime = +new Date()
-            const queryExecutionTime = queryEndTime - queryStartTime
-
-            if (
-                maxQueryExecutionTime &&
-                queryExecutionTime > maxQueryExecutionTime
-            ) {
-                this.driver.connection.logger.logQuerySlow(
-                    queryExecutionTime,
-                    query,
-                    parameters,
-                    this,
-                )
-            }
-
-            return result
+            queryEndTime = +new Date()
         } catch (err) {
             this.driver.connection.logger.logQueryError(
                 err,
@@ -119,6 +104,27 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             )
             throw new QueryFailedError(query, parameters, err)
         }
+
+        // log slow queries if maxQueryExecution time is set
+        const queryExecutionTime = queryEndTime - queryStartTime
+        if (
+            maxQueryExecutionTime &&
+            queryExecutionTime > maxQueryExecutionTime
+        ) {
+            this.driver.connection.logger.logQuerySlow(
+                queryExecutionTime,
+                query,
+                parameters,
+                this,
+            )
+        }
+
+        // parse result if needed
+        if (useStructuredResult) {
+            // TODO: Parse result
+            console.log("TODO: ", JSON.stringify(result.resultSets))
+        }
+        return result
     }
 
     protected loadTables(tablePaths?: string[] | undefined): Promise<Table[]> {
@@ -143,26 +149,17 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      * Creates/uses database connection from the connection pool to perform further operations.
      * Returns obtained database connection.
      */
-    async connect(): Promise<Ydb.Session> {
+    async connect(): Promise<Ydb.Driver> {
+        if (this.databaseConnection) return this.databaseConnection
+
         if (!this.driver.driver) {
             throw new DriverNotInitialized("ydb")
         }
-        if (this.databaseConnection && !this.isReleased)
-            return this.databaseConnection
-
         if (!this.databaseConnection) {
-            this.databaseConnection =
-                await this.driver.driver.tableClient.getSessionUnmanaged(
-                    this.sessionTimeout,
-                )
+            this.databaseConnection = this.driver.driver
         }
 
-        this.databaseConnection.acquire()
-
         this.isReleased = false
-
-        this.driver.connectedQueryRunners.push(this)
-
         return this.databaseConnection
     }
 
@@ -170,21 +167,8 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      * Releases used database connection.
      * You cannot use query runner methods once its released.
      */
-    async release(): Promise<void> {
-        if (this.isReleased || !this.databaseConnection) {
-            return
-        }
+    async release(): Promise<void> {}
 
-        this.isReleased = true
-
-        this.databaseConnection.release()
-
-        const index = this.driver.connectedQueryRunners.indexOf(this)
-
-        if (index !== -1) {
-            this.driver.connectedQueryRunners.splice(index, 1)
-        }
-    }
     async clearDatabase(database?: string | undefined): Promise<void> {
         const result = await this.driver.driver?.schemeClient.listDirectory("/")
 
