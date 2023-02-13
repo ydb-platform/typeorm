@@ -7,27 +7,35 @@ import {
     createTestingConnections,
     reloadTestingDatabases,
 } from "../../../utils/test-utils"
+import { YdbDriver } from "../../../../src/driver/ydb/YdbDriver"
 
 describe("ydb driver > startup", () => {
-    let connections: DataSource[]
+    let connection: DataSource
 
     before(
         async () =>
-            (connections = await createTestingConnections({
-                entities: [],
-                schemaCreate: true,
-                dropSchema: true,
-                enabledDrivers: ["ydb"],
-            })),
+            (connection = (
+                await createTestingConnections({
+                    entities: [],
+                    schemaCreate: true,
+                    dropSchema: true,
+                    enabledDrivers: ["ydb"],
+                })
+            )[0]),
     )
-    beforeEach(() => reloadTestingDatabases(connections))
-    after(() => closeTestingConnections(connections))
+    beforeEach(() => reloadTestingDatabases([connection]))
+    after(() => closeTestingConnections([connection]))
 
-    it("should just startup", () =>
-        Promise.all(
-            connections.map(async (connection) => {
-                // if we come this far, test was successful as a connection was established
-                expect(connection).to.not.be.null
-            }),
-        ))
+    it("must just startup", async () => {
+        // if we come this far, test was successful as a connection was established
+        expect(connection).to.not.be.null
+        expect(connection.driver instanceof YdbDriver).to.be.true
+    })
+
+    it("must perform `select 1, 'abc', 123.12;` query", async () => {
+        const queryRunner = connection.driver.createQueryRunner("master")
+        await queryRunner.connect()
+        const res = await queryRunner.query("select 1, 'abc', 123.12", [], true)
+        expect(res).to.eq([1, "abc", 123.12])
+    })
 })
