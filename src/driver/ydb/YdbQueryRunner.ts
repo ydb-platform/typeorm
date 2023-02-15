@@ -50,6 +50,10 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             throw new DriverNotInitialized("ydb")
         }
 
+        if (!this.driver.driver) {
+            throw new DriverNotInitialized("ydb")
+        }
+
         this.connection = ydbDriver.connection
         this.broadcaster = new Broadcaster(this)
     }
