@@ -14,10 +14,15 @@ import { YdbDriver } from "./YdbDriver"
 import { ReplicationMode } from "../types/ReplicationMode"
 import {
     DriverNotInitialized,
+    QueryFailedError,
     QueryRunnerAlreadyReleasedError,
 } from "../../error"
 import { Broadcaster } from "../../subscriber/Broadcaster"
 import * as Ydb from "ydb-sdk"
+
+interface IQueryParams {
+    [k: string]: Ydb.Ydb.ITypedValue
+}
 
 export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
@@ -26,10 +31,17 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     driver: YdbDriver
 
     /**
+     * Ydb Sdk underlying library
+     */
+    Ydb: {
+        Driver: typeof Ydb.Driver
+        Session: typeof Ydb.Session
+    }
+
+    /**
      * Real database connection from a connection pool used to perform queries.
      */
-    databaseConnection: Ydb.Session
-    private sessionTimeout: number
+    databaseConnection: Ydb.Driver
 
     constructor(ydbDriver: YdbDriver, replicationMode: ReplicationMode) {
         super()
@@ -38,23 +50,85 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             throw new DriverNotInitialized("ydb")
         }
 
+        if (!this.driver.driver) {
+            throw new DriverNotInitialized("ydb")
+        }
+
         this.connection = ydbDriver.connection
         this.broadcaster = new Broadcaster(this)
-        this.sessionTimeout = ydbDriver.options.connectTimeout
     }
 
+    /**
+     * Executes a given SQL query with optional parameters.
+     */
     async query(
         query: string,
-        // TODO: check from where parameters can be send
-        parameters?: any | undefined,
+        parameters?: any[] | undefined,
         useStructuredResult?: boolean | undefined,
     ): Promise<any> {
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
-        await this.driver.driver?.tableClient.withSession(async (session) => {
-            const preparedQuery = await session.prepareQuery(query)
-            await session.executeQuery(preparedQuery, parameters)
-        })
+        this.driver.connection.logger.logQuery(query, parameters, this)
+
+        const databaseConnection = await this.connect()
+
+        let typedParams: IQueryParams = {}
+        function isQueryParam(item: any): item is IQueryParams {
+            return item[0]?.hasOwnProperty("type") === true
+        }
+        if (parameters?.length && isQueryParam(parameters[0])) {
+            Object.assign(typedParams, parameters[0])
+        } else {
+            parameters?.map((val, ind) => {
+                Object.assign(typedParams, {
+                    ["$param" + ind.toString()]: Ydb.TypedValues.string(val),
+                })
+            })
+        }
+
+        const queryStartTime = +new Date()
+        let result: Ydb.Ydb.Table.ExecuteQueryResult | object[]
+        const maxQueryExecutionTime = this.driver.options.maxQueryExecutionTime
+        let queryEndTime: number
+
+        try {
+            result = await databaseConnection.tableClient.withSession(
+                async (session) => {
+                    return await session.executeQuery(query, typedParams)
+                },
+            )
+
+            queryEndTime = +new Date()
+        } catch (err) {
+            this.driver.connection.logger.logQueryError(
+                err,
+                query,
+                parameters,
+                this,
+            )
+            throw new QueryFailedError(query, parameters, err)
+        }
+
+        // log slow queries if maxQueryExecution time is set
+        const queryExecutionTime = queryEndTime - queryStartTime
+        if (
+            maxQueryExecutionTime &&
+            queryExecutionTime > maxQueryExecutionTime
+        ) {
+            this.driver.connection.logger.logQuerySlow(
+                queryExecutionTime,
+                query,
+                parameters,
+                this,
+            )
+        }
+
+        // parse result if needed
+        if (useStructuredResult) {
+            // TODO: Parse result
+            console.log("TODO: ", JSON.stringify(result.resultSets))
+        }
+        return result
     }
 
     protected loadTables(tablePaths?: string[] | undefined): Promise<Table[]> {
@@ -79,26 +153,17 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      * Creates/uses database connection from the connection pool to perform further operations.
      * Returns obtained database connection.
      */
-    async connect(): Promise<Ydb.Session> {
+    async connect(): Promise<Ydb.Driver> {
+        if (this.databaseConnection) return this.databaseConnection
+
         if (!this.driver.driver) {
             throw new DriverNotInitialized("ydb")
         }
-        if (this.databaseConnection && !this.isReleased)
-            return this.databaseConnection
-
         if (!this.databaseConnection) {
-            this.databaseConnection =
-                await this.driver.driver.tableClient.getSessionUnmanaged(
-                    this.sessionTimeout,
-                )
+            this.databaseConnection = this.driver.driver
         }
 
-        this.databaseConnection.acquire()
-
         this.isReleased = false
-
-        this.driver.connectedQueryRunners.push(this)
-
         return this.databaseConnection
     }
 
@@ -106,21 +171,8 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      * Releases used database connection.
      * You cannot use query runner methods once its released.
      */
-    async release(): Promise<void> {
-        if (this.isReleased || !this.databaseConnection) {
-            return
-        }
+    async release(): Promise<void> {}
 
-        this.isReleased = true
-
-        this.databaseConnection.release()
-
-        const index = this.driver.connectedQueryRunners.indexOf(this)
-
-        if (index !== -1) {
-            this.driver.connectedQueryRunners.splice(index, 1)
-        }
-    }
     async clearDatabase(database?: string | undefined): Promise<void> {
         const result = await this.driver.driver?.schemeClient.listDirectory("/")
 
