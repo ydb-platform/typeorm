@@ -128,11 +128,7 @@ export class YdbDriver implements Driver {
         // ready doesn't mean that connection is successfull (investigate why)
     }
 
-    async afterConnect(): Promise<void> {
-        const qRunner: YdbQueryRunner = new YdbQueryRunner(this, "master")
-        const result = await qRunner.query(`SELECT 1;`, ["test", "test 1"])
-        console.log("Select 1", result)
-    }
+    async afterConnect(): Promise<void> {}
 
     async disconnect(): Promise<void> {
         await this.driver?.destroy()
