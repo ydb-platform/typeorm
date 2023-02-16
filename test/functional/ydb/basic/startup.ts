@@ -36,6 +36,10 @@ describe("ydb driver > startup", () => {
         const queryRunner = connection.driver.createQueryRunner("master")
         await queryRunner.connect()
         const res = await queryRunner.query("select 1, 'abc', 123.12", [], true)
-        expect(res).to.eq([1, "abc", 123.12])
+        expect(res.records[0]).to.deep.equal({
+            column0: 1,
+            column1: "abc",
+            column2: 123.12,
+        })
     })
 })
