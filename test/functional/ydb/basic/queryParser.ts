@@ -144,7 +144,6 @@ describe("ydb driver > queryParser", () => {
             nestedValue: {
                 boolValue: false,
             },
-            variantIndex: 1,
         })
         // expect(resVariant.records[0]).to.deep.equal({
         //     v1: 6,
