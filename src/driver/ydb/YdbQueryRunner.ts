@@ -136,9 +136,8 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
 
         const result = new QueryResult()
         result.raw = raw
-        // TODO: Change (0) element to other index if nessesary
-        result.records = ParsedQueryResult.createNativeObjects(
-            raw.resultSets[0],
+        result.records = raw.resultSets.map((resultSet) =>
+            ParsedQueryResult.createNativeObjects(resultSet),
         )
         return result
     }

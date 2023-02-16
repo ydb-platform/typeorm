@@ -55,7 +55,7 @@ describe("ydb driver > queryParser", () => {
         Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
         DyNumber("1E-130")`
         const res = await queryRunner.query(query, [], true)
-        testFields(res, false, {
+        testFields(res.records[0][0], false, {
             column0: true,
             column1: 0,
             column2: -1,
@@ -74,7 +74,7 @@ describe("ydb driver > queryParser", () => {
         })
 
         // test dates equality
-        testFields(res, "valueOf", {
+        testFields(res.records[0][0], "valueOf", {
             column14: new Date("2017-11-27T00:00:00.000Z").valueOf(),
             column15: new Date("2017-11-27T13:24:00.000Z").valueOf(),
             column16: new Date("2017-11-27T13:24:00.123Z").valueOf(),
@@ -84,7 +84,7 @@ describe("ydb driver > queryParser", () => {
         })
 
         // test longs equality
-        testFields(res, "toString", {
+        testFields(res.records[0][0], "toString", {
             column4: "-3",
             column17: "93784567890", // microseconds interval
         })
@@ -107,7 +107,7 @@ describe("ydb driver > queryParser", () => {
         )
         `
         const res = await queryRunner.query(query, [], true)
-        expect(res.records[0]).to.deep.equal({
+        expect(res.records[0][0]).to.deep.equal({
             column0: [1, 2, 3],
             column1: { a: 1, b: 2, c: 3 },
             column2: { "1": null, "2": null, "3": null },
@@ -175,11 +175,11 @@ describe("ydb driver > queryParser", () => {
     //  AsList(), -- EmptyList
     //  AsDict() -- EmptyDict
 
-    it("performs special types parsing", async () => {
+    it("performs special types parsing - FAILS, ADD Tagged type IN YDB-SDK", async () => {
         const query = `SELECT AsTagged(1, "Foo"), -- Tagged
         FIND("abcdefg_abcdefg", "abc", 9), -- Null`
         const res = await queryRunner.query(query, [], true)
-        expect(res.records[0]).to.deep.equal({
+        expect(res.records[0][0]).to.deep.equal({
             column0: 1,
             column1: null,
         })
@@ -241,7 +241,7 @@ describe("ydb driver > queryParser", () => {
         CAST("1E-130" AS DyNumber?)`
         const res = await queryRunner.query(query, [], true)
 
-        testFields(res, false, {
+        testFields(res.records[0][0], false, {
             column0: null,
             column1: true,
             column10: 10.100000381469727,
@@ -287,7 +287,7 @@ describe("ydb driver > queryParser", () => {
         })
 
         // test dates equality
-        testFields(res, "valueOf", {
+        testFields(res.records[0][0], "valueOf", {
             column12: new Date("1970-01-13T00:00:00.000Z").valueOf(),
             column13: new Date("1970-01-01T00:00:13.000Z").valueOf(),
             column14: new Date("1970-01-01T00:00:00.000Z").valueOf(),
@@ -302,7 +302,7 @@ describe("ydb driver > queryParser", () => {
             column44: new Date("1970-01-01T00:00:00.000Z").valueOf(),
         })
 
-        testFields(res, "toString", {
+        testFields(res.records[0][0], "toString", {
             column34: "-8",
             column8: "-8",
         })
