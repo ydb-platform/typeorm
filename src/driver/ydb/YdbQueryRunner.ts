@@ -19,9 +19,16 @@ import {
 } from "../../error"
 import { Broadcaster } from "../../subscriber/Broadcaster"
 import * as Ydb from "ydb-sdk"
+import { QueryResult } from "../../query-runner/QueryResult"
 
 interface IQueryParams {
     [k: string]: Ydb.Ydb.ITypedValue
+}
+
+class ParsedQueryResult extends Ydb.TypedData {
+    constructor(obj: any) {
+        super(obj)
+    }
 }
 
 export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
@@ -64,7 +71,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     async query(
         query: string,
         parameters?: any[] | undefined,
-        useStructuredResult?: boolean | undefined,
+        useStructuredResult = false,
     ): Promise<any> {
         if (this.isReleased) throw new QueryRunnerAlreadyReleasedError()
 
@@ -87,12 +94,12 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         }
 
         const queryStartTime = +new Date()
-        let result: Ydb.Ydb.Table.ExecuteQueryResult | object[]
+        let raw: Ydb.Ydb.Table.ExecuteQueryResult | object[]
         const maxQueryExecutionTime = this.driver.options.maxQueryExecutionTime
         let queryEndTime: number
 
         try {
-            result = await databaseConnection.tableClient.withSession(
+            raw = await databaseConnection.tableClient.withSession(
                 async (session) => {
                     return await session.executeQuery(query, typedParams)
                 },
@@ -123,11 +130,15 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             )
         }
 
-        // parse result if needed
-        if (useStructuredResult) {
-            // TODO: Parse result
-            console.log("TODO: ", JSON.stringify(result.resultSets))
+        if (!useStructuredResult) {
+            return raw
         }
+
+        const result = new QueryResult()
+        result.raw = raw
+        result.records = raw.resultSets.map((resultSet) =>
+            ParsedQueryResult.createNativeObjects(resultSet),
+        )
         return result
     }
 
