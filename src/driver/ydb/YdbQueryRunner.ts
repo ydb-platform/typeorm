@@ -16,6 +16,9 @@ import {
     DriverNotInitialized,
     QueryFailedError,
     QueryRunnerAlreadyReleasedError,
+    TransactionAlreadyStartedError,
+    TransactionNotStartedError,
+    TypeORMError,
 } from "../../error"
 import { Broadcaster } from "../../subscriber/Broadcaster"
 import * as Ydb from "ydb-sdk"
@@ -50,13 +53,17 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
      */
     databaseConnection: Ydb.Driver
 
+    /** */
+    sessionTransaction: null | {
+        session: Ydb.Session
+        txId: string
+        resolve: (value: void | PromiseLike<void>) => void
+        reject: (reason?: any) => void
+    } = null
+
     constructor(ydbDriver: YdbDriver, replicationMode: ReplicationMode) {
         super()
         this.driver = ydbDriver
-        if (!this.driver.driver) {
-            throw new DriverNotInitialized("ydb")
-        }
-
         if (!this.driver.driver) {
             throw new DriverNotInitialized("ydb")
         }
@@ -194,21 +201,121 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         })
     }
 
-    startTransaction(
+    /**
+     * Starts transaction inside of new session
+     *
+     * Isolation levels in YDB are not the same as mentioned in wiki, but are similar
+     *
+     * * 'SERIALIZABLE' isolationLevel is equal to YDB's Serializable,
+     * * 'READ COMMITTED' isolationLevel is equal to YDB's Online Read Only with consistent reads
+     * * 'READ UNCOMMITTED' isolationLevel is equal to YDB's Online Read Only with inconsistent reads
+     */
+    async startTransaction(
         isolationLevel?: IsolationLevel | undefined,
     ): Promise<void> {
-        // TODO: Needs implementation
-        return Promise.resolve()
+        // TODO: Add tests
+        if (this.isTransactionActive || this.sessionTransaction)
+            throw new TransactionAlreadyStartedError()
+
+        this.isTransactionActive = true
+        try {
+            await this.broadcaster.broadcast("BeforeTransactionStart")
+        } catch (err) {
+            this.isTransactionActive = false
+            throw err
+        }
+
+        await this.connect()
+        await this.createSessionTransaction(isolationLevel)
     }
 
-    commitTransaction(): Promise<void> {
-        // TODO: Needs implementation
-        return Promise.resolve()
+    async createSessionTransaction(
+        isolationLevel?: IsolationLevel | undefined,
+    ): Promise<void> {
+        let transactionSettings: Ydb.Ydb.Table.ITransactionSettings = {}
+
+        if (isolationLevel === "SERIALIZABLE" || !isolationLevel)
+            transactionSettings = { serializableReadWrite: {} }
+
+        if (isolationLevel === "READ COMMITTED")
+            transactionSettings = {
+                onlineReadOnly: { allowInconsistentReads: false },
+            }
+
+        if (isolationLevel === "READ UNCOMMITTED")
+            transactionSettings = {
+                onlineReadOnly: { allowInconsistentReads: true },
+            }
+
+        if (isolationLevel === "REPEATABLE READ")
+            throw new TypeORMError(
+                "REPEATABLE READ transactions are not supported by YDB",
+            )
+
+        return new Promise(
+            (startTransactionResolve, startTransactionReject) => {
+                try {
+                    this.databaseConnection.tableClient.withSession(
+                        (session) => {
+                            return new Promise(async (resolve, reject) => {
+                                const tx = await session.beginTransaction(
+                                    transactionSettings,
+                                )
+                                this.connection.logger.logQuery(
+                                    "START TRANSACTION",
+                                )
+
+                                this.sessionTransaction = {
+                                    session,
+                                    txId: tx.id as string,
+                                    resolve,
+                                    reject,
+                                }
+                                startTransactionResolve()
+                            })
+                        },
+                    )
+                } catch (error) {
+                    startTransactionReject(error)
+                }
+            },
+        )
     }
 
-    rollbackTransaction(): Promise<void> {
-        // TODO: Needs implementation
-        return Promise.resolve()
+    async commitTransaction(): Promise<void> {
+        if (!this.isTransactionActive || !this.sessionTransaction)
+            throw new TransactionNotStartedError()
+
+        await this.broadcaster.broadcast("BeforeTransactionCommit")
+
+        await this.sessionTransaction.session.commitTransaction({
+            txId: this.sessionTransaction.txId,
+        })
+        this.connection.logger.logQuery("COMMIT")
+
+        this.sessionTransaction.resolve()
+        this.sessionTransaction = null
+        this.isTransactionActive = false
+
+        await this.broadcaster.broadcast("AfterTransactionCommit")
+    }
+
+    async rollbackTransaction(): Promise<void> {
+        if (!this.isTransactionActive || !this.sessionTransaction)
+            throw new TransactionNotStartedError()
+
+        await this.broadcaster.broadcast("BeforeTransactionRollback")
+
+        await this.sessionTransaction.session.rollbackTransaction({
+            txId: this.sessionTransaction.txId,
+        })
+        this.connection.logger.logQuery("ROLLBACK")
+
+        this.sessionTransaction.resolve()
+        this.sessionTransaction = null
+        this.isTransactionActive = false
+
+        await this.broadcaster.broadcast("AfterTransactionRollback")
     }
 
     stream(
