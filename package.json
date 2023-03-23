@@ -161,7 +161,7 @@
     "sqlite3": "^5.0.3",
     "ts-node": "^10.7.0",
     "typeorm-aurora-data-api-driver": "^2.0.0",
-    "ydb-sdk": "^3.4.4"
+    "ydb-sdk": "^4.1.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/spanner": {

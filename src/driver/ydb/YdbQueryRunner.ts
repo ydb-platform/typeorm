@@ -204,11 +204,8 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
      * Starts transaction inside of new session
      *
-     * Isolation levels in YDB are not the same as mentioned in wiki, but are similar
-     *
-     * * 'SERIALIZABLE' isolationLevel is equal to YDB's Serializable,
-     * * 'READ COMMITTED' isolationLevel is equal to YDB's Online Read Only with consistent reads
-     * * 'READ UNCOMMITTED' isolationLevel is equal to YDB's Online Read Only with inconsistent reads
+     * Supported levels: `"SERIALIZABLE"`, `"ONLINE READ ONLY"`, `"STALE READ ONLY"`, `"SNAPSHOT READ ONLY"`
+     * * 'SERIALIZABLE' isolationLevel is not the same as mentioned in wiki, but is similar to YDB's Serializable
      */
     async startTransaction(
         isolationLevel?: IsolationLevel | undefined,
@@ -237,19 +234,28 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         if (isolationLevel === "SERIALIZABLE" || !isolationLevel)
             transactionSettings = { serializableReadWrite: {} }
 
-        if (isolationLevel === "READ COMMITTED")
+        if (isolationLevel === "ONLINE READ ONLY")
             transactionSettings = {
                 onlineReadOnly: { allowInconsistentReads: false },
             }
 
-        if (isolationLevel === "READ UNCOMMITTED")
+        if (isolationLevel === "STALE READ ONLY")
             transactionSettings = {
-                onlineReadOnly: { allowInconsistentReads: true },
+                staleReadOnly: {},
             }
 
-        if (isolationLevel === "REPEATABLE READ")
+        if (isolationLevel === "SNAPSHOT READ ONLY")
+            transactionSettings = {
+                snapshotReadOnly: {},
+            }
+
+        if (
+            isolationLevel === "REPEATABLE READ" ||
+            isolationLevel === "READ COMMITTED" ||
+            isolationLevel === "READ UNCOMMITTED"
+        )
             throw new TypeORMError(
-                "REPEATABLE READ transactions are not supported by YDB",
+                `${isolationLevel} transactions are not supported by YDB`,
             )
 
         return new Promise(
