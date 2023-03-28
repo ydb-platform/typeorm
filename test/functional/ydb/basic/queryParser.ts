@@ -116,51 +116,36 @@ describe("ydb driver > queryParser", () => {
         })
     })
 
-    it("performs enum, variant parsing - FAILS, BUGFIX IN YDB-SDK", async () => {
+    it("performs enum, variant parsing", async () => {
         const resVariant = await queryRunner.query(
-            `$var_type = Variant<foo: Int32, bar: Bool>;
-        SELECT
-           Variant(6, "foo", $var_type) as v1,
-           Variant(false, "bar", $var_type) as v2;`,
+            `$var_type_struct = Variant<foo: UInt32, bar: String>;
+                $var_type_tuple = Variant<Int32,Bool>;
+                SELECT
+                    Variant(12345678, "foo", $var_type_struct) as v1,
+                    Variant("AbCdEfGh", "bar", $var_type_struct) as v2,
+                    Variant(-12345678, "0", $var_type_tuple) as v3,
+                    Variant(false, "1", $var_type_tuple) as v4;`,
             [],
             true,
         )
-        // Just check that input is valid
-        expect(
-            JSON.parse(
-                JSON.stringify(resVariant.raw.resultSets[0].rows[0].items[0]),
-            ),
-        ).to.deep.equal({
-            nestedValue: {
-                int32Value: 6,
-            },
-            variantIndex: 1,
+        expect(resVariant.records[0][0]).to.deep.equal({
+            v1: { foo: 12345678 },
+            v2: { bar: "AbCdEfGh" },
+            v3: [-12345678, undefined],
+            v4: [undefined, false],
         })
-        expect(
-            JSON.parse(
-                JSON.stringify(resVariant.raw.resultSets[0].rows[0].items[1]),
-            ),
-        ).to.deep.equal({
-            nestedValue: {
-                boolValue: false,
-            },
+        const resEnum = await queryRunner.query(
+            `$enum_type = Enum<Foo, Bar>;
+        SELECT
+           Enum("Foo", $enum_type) as e1,
+           Enum("Bar", $enum_type) as e2;`,
+            [],
+            true,
+        )
+        expect(resEnum.records[0][0]).to.deep.equal({
+            e1: { Foo: null },
+            e2: { Bar: null },
         })
-        // expect(resVariant.records[0]).to.deep.equal({
-        //     v1: 6,
-        //     v2: false,
-        // })
-        // const resEnum = await queryRunner.query(
-        //     `$enum_type = Enum<Foo, Bar>;
-        // SELECT
-        //    Enum("Foo", $enum_type) as e1,
-        //    Enum("Bar", $enum_type) as e2;`,
-        //     [],
-        //     true,
-        // )
-        // expect(resEnum.records[0]).to.deep.equal({
-        //     e1: "Foo",
-        //     e2: "Bar",
-        // })
     })
 
     // not testing parsing of: - not serializing
@@ -175,15 +160,15 @@ describe("ydb driver > queryParser", () => {
     //  AsList(), -- EmptyList
     //  AsDict() -- EmptyDict
 
-    it("performs special types parsing - FAILS, ADD Tagged type IN YDB-SDK", async () => {
-        const query = `SELECT AsTagged(1, "Foo"), -- Tagged
-        FIND("abcdefg_abcdefg", "abc", 9), -- Null`
-        const res = await queryRunner.query(query, [], true)
-        expect(res.records[0][0]).to.deep.equal({
-            column0: 1,
-            column1: null,
-        })
-    })
+    // it("performs special types parsing - FAILS, ADD Tagged type IN YDB-SDK", async () => {
+    //     const query = `SELECT AsTagged(1, "Foo"), -- Tagged
+    //     FIND("abcdefg_abcdefg", "abc", 9), -- Null`
+    //     const res = await queryRunner.query(query, [], true)
+    //     expect(res.records[0][0]).to.deep.equal({
+    //         column0: 1,
+    //         column1: null,
+    //     })
+    // })
 
     it("performs cast types parsing", async () => {
         const query = `SELECT CAST(Null AS Void),
