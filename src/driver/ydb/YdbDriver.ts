@@ -23,6 +23,7 @@ import {
 } from "../../error"
 import { YdbQueryRunner } from "./YdbQueryRunner"
 import { RdbmsSchemaBuilder } from "../../schema-builder/RdbmsSchemaBuilder"
+import { InstanceChecker } from "../../util/InstanceChecker"
 
 // TODO: remove Ydb references to have no direct deps
 export class YdbDriver implements Driver {
@@ -67,7 +68,36 @@ export class YdbDriver implements Driver {
     withLengthColumnTypes: ColumnType[]
     withPrecisionColumnTypes: ColumnType[]
     withScaleColumnTypes: ColumnType[]
-    mappedDataTypes: MappedColumnTypes
+
+    /**
+     * ORM has special columns and we need to know what database column types should be for those columns.
+     * Column types are driver dependant.
+     */
+    mappedDataTypes: MappedColumnTypes = {
+        createDate: "timestamp",
+        createDateDefault: "CAST(CurrentUtcDatetime() AS Timestamp)",
+        updateDate: "timestamp",
+        updateDateDefault: "CAST(CurrentUtcDatetime() AS Timestamp)",
+        deleteDate: "timestamp",
+        deleteDateNullable: true,
+        version: "int64",
+        treeLevel: "int64",
+        migrationId: "int64",
+        migrationName: "utf8",
+        migrationTimestamp: "int64",
+        cacheId: "utf8",
+        cacheIdentifier: "utf8",
+        cacheTime: "int64",
+        cacheDuration: "int64",
+        cacheQuery: "utf8",
+        cacheResult: "utf8",
+        metadataType: "utf8",
+        metadataDatabase: "utf8",
+        metadataSchema: "utf8",
+        metadataTable: "utf8",
+        metadataName: "utf8",
+        metadataValue: "utf8",
+    }
     maxAliasLength?: number | undefined
     cteCapabilities: CteCapabilities
 
@@ -151,42 +181,101 @@ export class YdbDriver implements Driver {
     escape(name: string): string {
         throw new Error("Method not implemented.")
     }
+
+    /**
+     * Build full table name with database name, schema name and table name.
+     */
     buildTableName(
         tableName: string,
         schema?: string | undefined,
         database?: string | undefined,
     ): string {
-        throw new Error("Method not implemented.")
+        let tablePath = [tableName]
+
+        if (database) {
+            tablePath.unshift(database)
+        }
+
+        return tablePath.join("/")
     }
+
+    /**
+     * Parse a target table name or other types and return a normalized table definition.
+     */
     parseTableName(
-        target: string | EntityMetadata | Table | View | TableForeignKey,
-    ): {
-        tableName: string
-        schema?: string | undefined
-        database?: string | undefined
-    } {
-        throw new Error("Method not implemented.")
+        target: EntityMetadata | Table | View | TableForeignKey | string,
+    ): { tableName: string; schema?: string; database?: string } {
+        const driverDatabase = this.database
+        const driverSchema = undefined
+
+        if (InstanceChecker.isTable(target) || InstanceChecker.isView(target)) {
+            const parsed = this.parseTableName(target.name)
+
+            return {
+                database: target.database || parsed.database || driverDatabase,
+                schema: target.schema || parsed.schema || driverSchema,
+                tableName: parsed.tableName,
+            }
+        }
+
+        if (InstanceChecker.isTableForeignKey(target)) {
+            const parsed = this.parseTableName(target.referencedTableName)
+
+            return {
+                database:
+                    target.referencedDatabase ||
+                    parsed.database ||
+                    driverDatabase,
+                schema:
+                    target.referencedSchema || parsed.schema || driverSchema,
+                tableName: parsed.tableName,
+            }
+        }
+
+        if (InstanceChecker.isEntityMetadata(target)) {
+            // EntityMetadata tableName is never a path
+
+            return {
+                database: target.database || driverDatabase,
+                schema: target.schema || driverSchema,
+                tableName: target.tableName,
+            }
+        }
+
+        const parts = target.split("/")
+
+        return {
+            database:
+                (parts.length > 1 ? parts.slice(0, -1).join("/") : undefined) ||
+                driverDatabase,
+            schema: driverSchema,
+            tableName: parts.length > 1 ? parts[parts.length - 1] : parts[0],
+        }
     }
+
     preparePersistentValue(value: any, column: ColumnMetadata) {
         throw new Error("Method not implemented.")
     }
     prepareHydratedValue(value: any, column: ColumnMetadata) {
         throw new Error("Method not implemented.")
     }
+
+    /**
+     * Creates a database type from a given column metadata.
+     */
     normalizeType(column: {
-        type?:
-            | string
-            | BooleanConstructor
-            | DateConstructor
-            | NumberConstructor
-            | StringConstructor
-            | undefined
+        type?: ColumnType | string
         length?: string | number | undefined
         precision?: number | null | undefined
         scale?: number | undefined
         isArray?: boolean | undefined
     }): string {
-        throw new Error("Method not implemented.")
+        const type = column.type
+        if (type === Number || column.type === "integer") return "int64"
+        if (type === String || column.type === "string") return "utf8"
+        if (type === Boolean) return "bool"
+        if (type === Date) return "timestamp"
+        else return (column.type as string) || ""
     }
     normalizeDefault(columnMetadata: ColumnMetadata): string | undefined {
         throw new Error("Method not implemented.")
