@@ -60,6 +60,9 @@ export class PlatformTools {
                 case "@sap/hana-client":
                     return require("@sap/hana-client")
 
+                case "@sap/hana-client/extension/Stream":
+                    return require("@sap/hana-client/extension/Stream")
+
                 case "hdb-pool":
                     return require("hdb-pool")
 
@@ -146,10 +149,13 @@ export class PlatformTools {
     }
 
     /**
-     * Normalizes given path. Does "path.normalize".
+     * Normalizes given path. Does "path.normalize" and replaces backslashes with forward slashes on Windows.
      */
     static pathNormalize(pathStr: string): string {
-        return path.normalize(pathStr)
+        let normalizedPath = path.normalize(pathStr)
+        if (process.platform === "win32")
+            normalizedPath = normalizedPath.replace(/\\/g, "/")
+        return normalizedPath
     }
 
     /**
@@ -245,6 +251,14 @@ export class PlatformTools {
 
     static log(message: string) {
         console.log(chalk.underline(message))
+    }
+
+    static info(info: any) {
+        return chalk.gray(info)
+    }
+
+    static error(error: any) {
+        return chalk.red(error)
     }
 
     static warn(message: string) {
