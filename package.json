@@ -164,8 +164,7 @@
     "sql.js": "^1.4.0",
     "sqlite3": "^5.0.3",
     "ts-node": "^10.7.0",
-    "typeorm-aurora-data-api-driver": "^2.0.0",
-    "ydb-sdk": "^4.2.0"
+    "typeorm-aurora-data-api-driver": "^2.0.0"
   },
   "peerDependenciesMeta": {
     "@google-cloud/spanner": {
@@ -218,9 +217,6 @@
     },
     "typeorm-aurora-data-api-driver": {
       "optional": true
-    },
-    "ydb-sdk": {
-      "optional": true
     }
   },
   "dependencies": {
@@ -238,11 +234,12 @@
     "sha.js": "^2.4.11",
     "tslib": "^2.5.0",
     "uuid": "^9.0.0",
-    "yargs": "^17.6.2"
+    "yargs": "^17.6.2",
+    "ydb-sdk": "^5.1.1"
   },
   "scripts": {
-
-    "test-fast": "mocha --file ./build/compiled/test/utils/test-setup.js --bail --recursive --timeout 60000 ./build/compiled/test",
+    "test": "rimraf ./build && tsc && mocha --file ./build/compiled/test/utils/test-setup.js --bail --recursive --timeout 90000 ./build/compiled/test",
+    "test-fast": "mocha --file ./build/compiled/test/utils/test-setup.js --bail --recursive --timeout 90000 ./build/compiled/test",
     "compile": "rimraf ./build && tsc",
     "watch": "./node_modules/.bin/tsc -w",
     "package": "gulp package",

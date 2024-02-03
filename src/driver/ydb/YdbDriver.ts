@@ -374,4 +374,6 @@ export class YdbDriver implements Driver {
             throw new DriverPackageNotInstalledError("Ydb", "ydb-sdk")
         }
     }
+
+    supportedUpsertTypes: UpsertType[] = [];
 }

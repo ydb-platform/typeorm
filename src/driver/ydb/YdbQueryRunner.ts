@@ -95,7 +95,7 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
         } else {
             parameters?.map((val, ind) => {
                 Object.assign(typedParams, {
-                    ["$param" + ind.toString()]: Ydb.TypedValues.string(val),
+                    ["$param" + ind.toString()]: Ydb.TypedValues.text(val),
                 })
             })
         }
@@ -631,5 +631,10 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
 
     clearTable(tableName: string): Promise<void> {
         throw new Error("Method not implemented.")
+    }
+
+    changeTableComment(tableOrName: Table | string, comment?: string): Promise<void> {
+        throw new Error("Method not implemented.");
+        // return Promise.resolve(undefined);
     }
 }
