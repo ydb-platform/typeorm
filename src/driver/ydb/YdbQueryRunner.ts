@@ -100,19 +100,19 @@ export class YdbQueryRunner extends BaseQueryRunner implements QueryRunner {
             })
         }
 
-        const queryStartTime = +new Date()
+        const queryStartTime = Date.now()
         let raw: Ydb.Ydb.Table.ExecuteQueryResult | object[]
         const maxQueryExecutionTime = this.driver.options.maxQueryExecutionTime
         let queryEndTime: number
 
         try {
-            raw = await databaseConnection.tableClient.withSession(
+            raw = await databaseConnection.tableClient.withSession( // TODO: Change to the query service
                 async (session) => {
                     return await session.executeQuery(query, typedParams)
                 },
             )
 
-            queryEndTime = +new Date()
+            queryEndTime = Date.now()
         } catch (err) {
             this.driver.connection.logger.logQueryError(
                 err,

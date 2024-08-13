@@ -1,14 +1,15 @@
 import "reflect-metadata"
 
-import { expect } from "chai"
-import { DataSource } from "../../../../src/data-source/DataSource"
+import {expect} from "chai"
+import {DataSource} from "../../../../src/data-source/DataSource"
 import {
     closeTestingConnections,
     createTestingConnections,
     reloadTestingDatabases,
 } from "../../../utils/test-utils"
-import { QueryRunner } from "../../../../src"
-import { testFields } from "../testUtils"
+import {QueryRunner} from "../../../../src"
+import {testFields} from "../testUtils"
+import Long from "long";
 
 describe("ydb driver > queryParser", () => {
     let connection: DataSource
@@ -31,29 +32,30 @@ describe("ydb driver > queryParser", () => {
 
     it("performs simple fields parsing", async () => {
         const query = `SELECT
-        Bool("true"),
-        Uint8("0"),
-        Int32("-1"),
-        Uint32("2"),
-        Int64("-3"),
-        Uint64("4"),
-        Float("-5"),
-        Double("6"),
-        Decimal("1.23", 5, 2),
-        String("foo"),
-        Utf8("bar"),
-        Yson("<a=1>[3;%false]"),
-        Json(@@{"a":1,"b":null}@@),
-        JsonDocument(@@{"a":1,"b":null}@@),
-        Date("2017-11-27"),
-        Datetime("2017-11-27T13:24:00Z"),
-        Timestamp("2017-11-27T13:24:00.123456Z"),
-        Interval("P1DT2H3M4.567890S"),
-        TzDate("2017-11-27,Europe/Moscow"),
-        TzDatetime("2017-11-27T13:24:00,America/Los_Angeles"),
-        TzTimestamp("2017-11-27T13:24:00.123456,GMT"),
-        Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
-        DyNumber("1E-130")`
+        Bool("true"), -- column0
+        Uint8("0"), -- column1
+        Int32("-1"), -- column2
+        Uint32("2"), -- column3
+        Int64("-3"), -- column4
+        Uint64("4"), -- column5
+        Float("-5"), -- column6
+        Double("6"), -- column7
+        Decimal("1.23", 5, 2), -- column8
+        String("foo"), -- column9
+        Text("some text"), -- column10
+        Utf8("bar"), -- column11
+        Yson("<a=1>[3;%false]"),  -- column12
+        Json(@@{"a":1,"b":null}@@),  -- column13
+        JsonDocument(@@{"a":1,"b":null}@@),  -- column14
+        Date("2017-11-27"),  -- column15
+        Datetime("2017-11-27T13:24:00Z"),  -- column16
+        Timestamp("2017-11-27T13:24:00.123456Z"),  -- column17
+        Interval("P1DT2H3M4.567890S"),  -- column18
+        TzDate("2017-11-27,Europe/Moscow"),  -- column19
+        TzDatetime("2017-11-27T13:24:00,America/Los_Angeles"),  -- column20
+        TzTimestamp("2017-11-27T13:24:00.123456,GMT"),  -- column21
+        Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),  -- column22
+        DyNumber("1E-130")  -- column23`
         const res = await queryRunner.query(query, [], true)
         testFields(res.records[0][0], false, {
             column0: true,
@@ -64,43 +66,44 @@ describe("ydb driver > queryParser", () => {
             column6: -5,
             column7: 6,
             column8: "1.23",
-            column9: "foo",
-            column10: "bar",
-            column11: "<a=1>[3;%false]",
-            column12: '{"a":1,"b":null}',
+            column9: Buffer.from([102, 111, 111]),
+            column10: 'some text',
+            column11: "bar",
+            column12: "<a=1>[3;%false]",
             column13: '{"a":1,"b":null}',
-            column21: "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb",
-            column22: ".1e-129",
+            column14: '{"a":1,"b":null}',
+            column22: "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb",
+            column23: ".1e-129",
         })
 
         // test dates equality
         testFields(res.records[0][0], "valueOf", {
-            column14: new Date("2017-11-27T00:00:00.000Z").valueOf(),
-            column15: new Date("2017-11-27T13:24:00.000Z").valueOf(),
-            column16: new Date("2017-11-27T13:24:00.123Z").valueOf(),
-            column18: new Date("2017-11-27T00:00:00.000Z").valueOf(),
-            column19: new Date("2017-11-27T13:24:00.000Z").valueOf(),
-            column20: new Date("2017-11-27T13:24:00.123Z").valueOf(),
+            column15: new Date("2017-11-27T00:00:00.000Z").valueOf(),
+            column16: new Date("2017-11-27T13:24:00.000Z").valueOf(),
+            column17: new Date("2017-11-27T13:24:00.123Z").valueOf(),
+            column18: Long.fromBits(-704712622, 21, false),
+            column20: new Date("2017-11-27T13:24:00.000Z").valueOf(),
+            column21: new Date("2017-11-27T13:24:00.123Z").valueOf(),
         })
 
         // test longs equality
         testFields(res.records[0][0], "toString", {
             column4: "-3",
-            column17: "93784567890", // microseconds interval
+            column18: "93784567890", // microseconds interval
         })
     })
 
     it("performs containers parsing", async () => {
         const query = `SELECT
-        AsList(1, 2, 3),
-        AsDict(
+        AsList(1, 2, 3), -- column0
+        AsDict( -- column1
           AsTuple("a", 1),
           AsTuple("b", 2),
           AsTuple("c", 3)
         ),
-        AsSet(1, 2, 3),
-        AsTuple(1, 2, "3"),
-        AsStruct(
+        AsSet(1, 2, 3), -- column2
+        AsTuple(1, 2, "3"), -- column3
+        AsStruct( -- column4
           1 AS a,
           2 AS b,
           "3" AS c
@@ -109,10 +112,10 @@ describe("ydb driver > queryParser", () => {
         const res = await queryRunner.query(query, [], true)
         expect(res.records[0][0]).to.deep.equal({
             column0: [1, 2, 3],
-            column1: { a: 1, b: 2, c: 3 },
-            column2: { "1": null, "2": null, "3": null },
-            column3: [1, 2, "3"],
-            column4: { a: 1, b: 2, c: "3" },
+            column1: {a: 1, b: 2, c: 3},
+            column2: {"1": null, "2": null, "3": null},
+            column3: [1, 2, Buffer.from([51])],
+            column4: {a: 1, b: 2, c: Buffer.from([51])},
         })
     })
 
@@ -129,8 +132,8 @@ describe("ydb driver > queryParser", () => {
             true,
         )
         expect(resVariant.records[0][0]).to.deep.equal({
-            v1: { foo: 12345678 },
-            v2: { bar: "AbCdEfGh" },
+            v1: {foo: 12345678},
+            v2: {bar: Buffer.from([65, 98, 67, 100, 69, 102, 71, 104])},
             v3: [-12345678, undefined],
             v4: [undefined, false],
         })
@@ -143,8 +146,8 @@ describe("ydb driver > queryParser", () => {
             true,
         )
         expect(resEnum.records[0][0]).to.deep.equal({
-            e1: { Foo: null },
-            e2: { Bar: null },
+            e1: {Foo: null},
+            e2: {Bar: null},
         })
     })
 
@@ -171,59 +174,59 @@ describe("ydb driver > queryParser", () => {
     // })
 
     it("performs cast types parsing", async () => {
-        const query = `SELECT CAST(Null AS Void),
-        CAST(1 AS Bool),
-        CAST(-2 AS Int8),
-        CAST(3 AS Uint8),
-        CAST(-4 AS Int16),
-        CAST(5 AS Uint16),
-        CAST(-6 AS Int32),
-        CAST(7 AS Uint32),
-        CAST(-8 AS Int64),
-        CAST(9 AS Uint64),
-        CAST(10.10 AS Float),
-        CAST(11.11 AS Double),
-        CAST(12 AS Date),
-        CAST(13 AS Datetime),
-        CAST(14 AS Timestamp),
-        CAST(15 AS Interval),
-        CAST(16 AS TzDate),
-        CAST(17 AS TzDatetime),
-        CAST(18 AS TzTimestamp),
-        CAST(0xA19F AS Bytes),
-        CAST(0x20 AS Text),
-        CAST('<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]' AS YSON),
-        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSON),
-        CAST('34ba4833-d48f-5655-8113-e247da8fe502' AS UUID),
-        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSONDocument),
-        CAST("1E-130" AS DyNumber),
+        const query = `SELECT CAST(Null AS Void), --column0
+        CAST(1 AS Bool), --column1
+        CAST(-2 AS Int8), --column2
+        CAST(3 AS Uint8), --column3
+        CAST(-4 AS Int16), --column4
+        CAST(5 AS Uint16), --column5
+        CAST(-6 AS Int32), --column6
+        CAST(7 AS Uint32), --column7
+        CAST(-8 AS Int64), --column8
+        CAST(9 AS Uint64), --column9
+        CAST(10.10 AS Float), --column10
+        CAST(11.11 AS Double), --column11
+        CAST(12 AS Date), --column12
+        CAST(13 AS Datetime), --column13
+        CAST(14 AS Timestamp), --column14
+        CAST(15 AS Interval), --column15
+        CAST(16 AS TzDate), --column16
+        CAST(17 AS TzDatetime), --column17
+        CAST(18 AS TzTimestamp), --column18
+        CAST(0xA19F AS Bytes), --column19
+        CAST(0x20 AS Text), --column20
+        CAST('<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]' AS YSON), --column21
+        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSON), --column22
+        CAST('34ba4833-d48f-5655-8113-e247da8fe502' AS UUID), --column23
+        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSONDocument), --column24
+        CAST("1E-130" AS DyNumber), --column25
         -- optional fields
-        CAST(Null AS Void?),
-        CAST(1 AS Bool?),
-        CAST(-2 AS Int8?),
-        CAST(3 AS Uint8?),
-        CAST(-4 AS Int16?),
-        CAST(5 AS Uint16?),
-        CAST(-6 AS Int32?),
-        CAST(7 AS Uint32?),
-        CAST(-8 AS Int64?),
-        CAST(9 AS Uint64?),
-        CAST(10.10 AS Float?),
-        CAST(11.11 AS Double?),
-        CAST(12 AS Date?),
-        CAST(13 AS Datetime?),
-        CAST(14 AS Timestamp?),
-        CAST(15 AS Interval?),
-        CAST(16 AS TzDate?),
-        CAST(17 AS TzDatetime?),
-        CAST(18 AS TzTimestamp?),
-        CAST(0xA19F AS Bytes?),
-        CAST(0x20 AS Text?),
-        CAST('<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]' AS YSON?),
-        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSON?),
-        CAST('34ba4833-d48f-5655-8113-e247da8fe502' AS UUID?),
-        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSONDocument?),
-        CAST("1E-130" AS DyNumber?)`
+        CAST(Null AS Void?), --column26
+        CAST(1 AS Bool?), --column27
+        CAST(-2 AS Int8?), --column28
+        CAST(3 AS Uint8?), --column29
+        CAST(-4 AS Int16?), --column30
+        CAST(5 AS Uint16?), --column31
+        CAST(-6 AS Int32?), --column32
+        CAST(7 AS Uint32?), --column33
+        CAST(-8 AS Int64?), --column34
+        CAST(9 AS Uint64?), --column36
+        CAST(10.10 AS Float?), --column37
+        CAST(11.11 AS Double?), --column38
+        CAST(12 AS Date?), --column39
+        CAST(13 AS Datetime?), --column40
+        CAST(14 AS Timestamp?), --column41
+        CAST(15 AS Interval?), --column42
+        CAST(16 AS TzDate?), --column43
+        CAST(17 AS TzDatetime?), --column44
+        CAST(18 AS TzTimestamp?), --column45
+        CAST(0xA19F AS Bytes?), --column46
+        CAST(0x20 AS Text?), --column47
+        CAST('<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]' AS YSON?), --column48
+        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSON?), --column49
+        CAST('34ba4833-d48f-5655-8113-e247da8fe502' AS UUID?), --column50
+        CAST('{"firstName": "John","lastName": "Smith","isAlive": true,"age": 27,"address": {"streetAddress": "21 2nd Street","postalCode": "10021-3100"},"phoneNumbers": [{"type": "office","number": "646 555-4567"}],"children": ["Catherine","Trevor"],"spouse": null}' AS JSONDocument?), --column51
+        CAST("1E-130" AS DyNumber?) --column52`
         const res = await queryRunner.query(query, [], true)
 
         testFields(res.records[0][0], false, {
@@ -232,7 +235,7 @@ describe("ydb driver > queryParser", () => {
             column10: 10.100000381469727,
             column11: 11.11,
             column15: 15,
-            column19: "41375",
+            column19: Buffer.from([52, 49, 51, 55, 53]),
             column2: -2,
             column20: "32",
             column21: "<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]",
@@ -256,7 +259,7 @@ describe("ydb driver > queryParser", () => {
             column37: 11.11,
             column4: -4,
             column41: 15,
-            column45: "41375",
+            column45: Buffer.from([52, 49, 51, 55, 53]),
             column46: "32",
             column47: "<a=z;x=y>[{abc=123; def=456};{abc=234; xyz=789};]",
             column48:

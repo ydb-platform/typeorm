@@ -42,7 +42,7 @@ describe("ydb driver > startup", () => {
         )
         expect(res.records[0][0]).to.deep.equal({
             column0: 1,
-            column1: "abc",
+            column1: Buffer.from([97, 98, 99]),
         })
         expect(res.records[1][0]).to.deep.equal({
             column0: 2,
